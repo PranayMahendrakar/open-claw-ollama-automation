@@ -62,3 +62,121 @@ def build_wa_client_js(system_prompt: str) -> str:
     const SYSTEM_PROMPT = `{safe_system}`;
 
     const client = new Client({{
+      authStrategy: new LocalAuth({{ dataPath: '.wwebjs_auth' }}),
+        puppeteer: {{ args: ['--no-sandbox', '--disable-setuid-sandbox'] }}
+        }});
+
+        client.on('qr', qr => {{
+          console.log('[QR] Scan this code with WhatsApp:');
+            qrcode.generate(qr, {{ small: true }});
+            }});
+
+            client.on('ready', () => {{
+              console.log('[INFO] WhatsApp client is ready!');
+                if (BOT_TIMEOUT > 0) {{
+                    console.log(`[INFO] Bot will auto-exit in ${{BOT_TIMEOUT}}s`);
+                        setTimeout(() => {{
+                              console.log('[INFO] Timeout reached — exiting cleanly.');
+                                    process.exit(0);
+                                        }}, BOT_TIMEOUT * 1000);
+                                          }}
+                                          }});
+
+                                          client.on('message', async msg => {{
+                                            // Skip group messages, status broadcasts, and messages from self
+                                              if (msg.from === 'status@broadcast') return;
+                                                if (msg.fromMe) return;
+
+                                                  const userText = msg.body.trim();
+                                                    if (!userText) return;
+
+                                                      console.log(`[MSG] From: ${{msg.from}} — ${{userText.substring(0, 80)}}`);
+
+                                                        try {{
+                                                            const res = await axios.post(OLLAMA_HOST + '/api/generate', {{
+                                                                  model: OLLAMA_MODEL,
+                                                                        prompt: userText,
+                                                                              system: SYSTEM_PROMPT,
+                                                                                    stream: false,
+                                                                                          options: {{ temperature: 0.7 }}
+                                                                                              }}, {{ timeout: 90000 }});
+
+                                                                                                  let reply = (res.data.response || 'No response from model.').trim();
+                                                                                                      // Strip <think> blocks
+                                                                                                          reply = reply.replace(/<think>[\\s\\S]*?<\\/think>/g, '').trim();
+                                                                                                              if (!reply) reply = 'Hmm, let me think about that more!';
+                                                                                                              
+                                                                                                                  await msg.reply(reply);
+                                                                                                                      console.log(`[REPLY] ${{reply.substring(0, 80)}}`);
+                                                                                                                        }} catch (err) {{
+                                                                                                                            console.error('[ERROR]', err.message);
+                                                                                                                                await msg.reply('Sorry, the AI is unavailable right now. Please try again!');
+                                                                                                                                  }}
+                                                                                                                                  }});
+                                                                                                                                  
+                                                                                                                                  client.initialize();
+                                                                                                                                  '''
+
+
+def write_node_client(system_prompt: str):
+        js_content = build_wa_client_js(system_prompt)
+    NODE_BOT_FILE.write_text(js_content, encoding='utf-8')
+    print(f'[INFO] Node.js client written to {NODE_BOT_FILE}')
+
+
+def install_node_deps():
+        packages = ['whatsapp-web.js', 'qrcode-terminal', 'axios']
+    subprocess.run(['npm', 'install'] + packages, check=True)
+    print('[INFO] Node packages installed.')
+
+
+def start_whatsapp_bot() -> subprocess.Popen:
+        env = os.environ.copy()
+    env['OLLAMA_HOST']  = OLLAMA_HOST
+    env['OLLAMA_MODEL'] = MODEL_NAME
+    env['BOT_TIMEOUT']  = str(BOT_TIMEOUT)
+    proc = subprocess.Popen(
+                ['node', str(NODE_BOT_FILE)],
+                stdout=sys.stdout,
+                stderr=sys.stderr,
+                env=env
+    )
+    return proc
+
+
+def main():
+        print('=' * 60)
+    print(' WhatsApp Bot | OpenClaw + Ollama')
+    print(f' Ollama  : {OLLAMA_HOST}')
+    print(f' Model   : {MODEL_NAME}')
+    print(f' Timeout : {BOT_TIMEOUT}s (0 = no timeout)')
+    print('=' * 60)
+
+    system = load_knowledge()
+
+    # Quick Ollama health check
+    try:
+                r = requests.get(f'{OLLAMA_HOST}/api/tags', timeout=10)
+                models = [m['name'] for m in r.json().get('models', [])]
+                print(f'[OLLAMA] Available models: {models}')
+except Exception as e:
+        print(f'[WARN] Ollama health check failed: {e}')
+
+    write_node_client(system)
+
+    try:
+                install_node_deps()
+except Exception as e:
+        print(f'[WARN] npm install had issues: {e}')
+
+    proc = start_whatsapp_bot()
+    try:
+                print('[INFO] Bot running. Ctrl+C to stop.')
+                proc.wait()
+except KeyboardInterrupt:
+        print('\n[INFO] Stopping bot...')
+        proc.terminate()
+
+
+if __name__ == '__main__':
+        main()
