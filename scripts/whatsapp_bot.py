@@ -25,7 +25,7 @@ def load_knowledge() -> str:
                     content = KNOWLEDGE_FILE.read_text(encoding='utf-8')
                     print(f'[INFO] Loaded knowledge.md ({len(content)} chars)')
                     return content
-                print('[WARN] knowledge.md not found — bot will have no personality context')
+    print('[WARN] knowledge.md not found - bot will have no personality context')
     return ''
 
 
