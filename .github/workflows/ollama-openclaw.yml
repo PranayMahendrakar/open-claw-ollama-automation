@@ -22,7 +22,7 @@ jobs:
     name: OpenClaw + Ollama (CPU)
     if: github.event.inputs.runner_type == 'cpu' || github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 70
 
     steps:
       - name: Checkout repository
@@ -66,13 +66,13 @@ jobs:
         env:
           OLLAMA_HOST: http://localhost:11434
           OLLAMA_MODEL: deepseek-r1:1.5b
-          BOT_TIMEOUT: '300'
+          BOT_TIMEOUT: '3600'
 
   openclaw-gpu:
     name: OpenClaw + Ollama (GPU)
     if: github.event.inputs.runner_type == 'gpu'
     runs-on: self-hosted
-    timeout-minutes: 30
+    timeout-minutes: 80
 
     steps:
       - name: Checkout repository
