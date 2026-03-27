@@ -17,6 +17,8 @@ on:
           - gpu
 
 jobs:
+
+  # ─── CPU Job ─────────────────────────────────────────────
   openclaw-cpu:
     name: OpenClaw + Ollama (CPU)
     if: github.event.inputs.runner_type == 'cpu' || github.event_name != 'workflow_dispatch'
@@ -36,21 +38,20 @@ jobs:
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          restore-keys: ${{ runner.os }}-pip-
 
       - name: Install Ollama
         run: |
           curl -fsSL https://ollama.com/install.sh | sh
           ollama --version
 
-      - name: Start Ollama service
+      - name: Start Ollama service (CPU)
         run: |
           ollama serve &
-          sleep 5
-          echo "Ollama service started"
+          sleep 6
+          echo "Ollama CPU service started"
 
-      - name: Pull OpenClaw model via Ollama
+      - name: Pull OpenClaw model (CPU — deepseek-r1:1.5b)
         run: |
           ollama pull deepseek-r1:1.5b
           ollama list
@@ -60,6 +61,9 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Load Pranay knowledge base
+        run: python scripts/load_knowledge.py --device cpu --test
+
       - name: Run OpenClaw automation (CPU)
         run: python scripts/run_openclaw.py --device cpu
 
@@ -68,7 +72,12 @@ jobs:
         env:
           WHATSAPP_SESSION: ${{ secrets.WHATSAPP_SESSION }}
           OLLAMA_HOST: http://localhost:11434
+          OLLAMA_MODEL: deepseek-r1:1.5b
 
+  # ─── GPU Job ─────────────────────────────────────────────
+  # Requires a self-hosted runner with NVIDIA GPU.
+  # Label your runner: self-hosted, gpu
+  # Run: OLLAMA_NUM_GPU=1 ollama serve
   openclaw-gpu:
     name: OpenClaw + Ollama (GPU)
     if: github.event.inputs.runner_type == 'gpu'
@@ -83,22 +92,28 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Check NVIDIA GPU
-        run: nvidia-smi
+      - name: Verify NVIDIA GPU
+        run: |
+          nvidia-smi
+          echo "GPU detected, proceeding with GPU mode"
 
       - name: Install Ollama with GPU support
         run: |
           curl -fsSL https://ollama.com/install.sh | sh
           ollama --version
 
-      - name: Start Ollama service with GPU
+      - name: Start Ollama service (GPU — 1 GPU layer)
         run: |
           OLLAMA_NUM_GPU=1 ollama serve &
-          sleep 5
+          sleep 6
+          echo "Ollama GPU service started"
+        env:
+          CUDA_VISIBLE_DEVICES: '0'
 
-      - name: Pull OpenClaw model via Ollama
+      # GPU can handle the bigger 7b model for more natural responses
+      - name: Pull OpenClaw model (GPU — deepseek-r1:7b)
         run: |
-          ollama pull deepseek-r1:1.5b
+          ollama pull deepseek-r1:7b
           ollama list
 
       - name: Install Python dependencies
@@ -106,13 +121,22 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Load Pranay knowledge base (GPU)
+        run: python scripts/load_knowledge.py --device gpu --test
+        env:
+          OLLAMA_MODEL: deepseek-r1:7b
+          CUDA_VISIBLE_DEVICES: '0'
+
       - name: Run OpenClaw automation (GPU)
         run: python scripts/run_openclaw.py --device gpu
         env:
+          OLLAMA_MODEL: deepseek-r1:7b
           CUDA_VISIBLE_DEVICES: '0'
 
-      - name: Run WhatsApp automation
+      - name: Run WhatsApp automation (GPU)
         run: python scripts/whatsapp_bot.py
         env:
           WHATSAPP_SESSION: ${{ secrets.WHATSAPP_SESSION }}
           OLLAMA_HOST: http://localhost:11434
+          OLLAMA_MODEL: deepseek-r1:7b
+          CUDA_VISIBLE_DEVICES: '0'
