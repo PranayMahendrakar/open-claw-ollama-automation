@@ -1,0 +1,118 @@
+name: OpenClaw Ollama Automation
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      runner_type:
+        description: 'Runner type: cpu or gpu'
+        required: true
+        default: 'cpu'
+        type: choice
+        options:
+          - cpu
+          - gpu
+
+jobs:
+  openclaw-cpu:
+    name: OpenClaw + Ollama (CPU)
+    if: github.event.inputs.runner_type == 'cpu' || github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama --version
+
+      - name: Start Ollama service
+        run: |
+          ollama serve &
+          sleep 5
+          echo "Ollama service started"
+
+      - name: Pull OpenClaw model via Ollama
+        run: |
+          ollama pull deepseek-r1:1.5b
+          ollama list
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run OpenClaw automation (CPU)
+        run: python scripts/run_openclaw.py --device cpu
+
+      - name: Run WhatsApp automation
+        run: python scripts/whatsapp_bot.py
+        env:
+          WHATSAPP_SESSION: ${{ secrets.WHATSAPP_SESSION }}
+          OLLAMA_HOST: http://localhost:11434
+
+  openclaw-gpu:
+    name: OpenClaw + Ollama (GPU)
+    if: github.event.inputs.runner_type == 'gpu'
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Check NVIDIA GPU
+        run: nvidia-smi
+
+      - name: Install Ollama with GPU support
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama --version
+
+      - name: Start Ollama service with GPU
+        run: |
+          OLLAMA_NUM_GPU=1 ollama serve &
+          sleep 5
+
+      - name: Pull OpenClaw model via Ollama
+        run: |
+          ollama pull deepseek-r1:1.5b
+          ollama list
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run OpenClaw automation (GPU)
+        run: python scripts/run_openclaw.py --device gpu
+        env:
+          CUDA_VISIBLE_DEVICES: '0'
+
+      - name: Run WhatsApp automation
+        run: python scripts/whatsapp_bot.py
+        env:
+          WHATSAPP_SESSION: ${{ secrets.WHATSAPP_SESSION }}
+          OLLAMA_HOST: http://localhost:11434
